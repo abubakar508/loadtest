@@ -1,0 +1,31 @@
+# Ignore environment variable files
+.env
+.env.*
+# Ignore local environment files with any extension starting with .env
+
+# Ignore Go build artifacts
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Ignore Go test binary
+*.test
+
+# Ignore output binaries
+/loadtester
+/loadtester.exe
+
+# Ignore vendor directory if you use vendoring
+/vendor/
+
+# Ignore IDE/editor config files
+.vscode/
+.idea/
+*.swp
+*~
+
+# Ignore OS generated files
+.DS_Store
+Thumbs.db
