@@ -82,7 +82,7 @@ curl -X POST http://localhost:8080/start-test
 8. {
   "url": "https://domain.com",
   "count": 20,
-  "concurrency": 1000 //number of requests per seconnd i.e in a count of 20 requests 1000 are seotn simlataneously in each
+  "concurrency": 1000 //number of requests per seconnd i.e in a count of 20 requests 1000 are seotn simultaneously in each
 }
 
 ## Important Notes

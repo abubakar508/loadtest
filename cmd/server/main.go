@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"time"
 
 	"github.com/abubakar508/loadtester/internal/db"
 	loadtest "github.com/abubakar508/loadtester/internal/loadstest"
@@ -22,6 +23,12 @@ type TestRequest struct {
 
 type TestResponse struct {
 	Message string `json:"message"`
+}
+
+type HealthResponse struct {
+	Status      string `json:"status"`
+	DBConnected bool   `json:"db_connected"`
+	Timestamp   string `json:"timestamp"`
 }
 
 func main() {
@@ -41,7 +48,9 @@ func main() {
 	}
 
 	mailer := mail.NewMailer()
+	toEmail := "abubakarismail508@gmail.com" // Change to your email address
 
+	// Load test endpoint
 	http.HandleFunc("/start-test", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -66,19 +75,16 @@ func main() {
 				return
 			}
 
-			// Save test results to DB
 			err = store.SaveTestResult(context.Background(), req.URL, req.Count, req.Concurrency, result.Duration.Milliseconds(), result.SuccessCount)
 			if err != nil {
 				log.Printf("Failed to save test result: %v", err)
 			}
 
-			// Calculate metrics
 			successRate := float64(result.SuccessCount) / float64(result.TotalCount) * 100
 			failureCount := result.TotalCount - result.SuccessCount
 			requestsPerSecond := float64(result.TotalCount) / result.Duration.Seconds()
-			avgResponseTimeMs := float64(result.Duration.Milliseconds()) / float64(result.TotalCount) // Approximate avg response time
+			avgResponseTimeMs := float64(result.Duration.Milliseconds()) / float64(result.TotalCount)
 
-			// Compose email subject and body
 			subject := fmt.Sprintf("Load Test Report: %s", req.URL)
 			body := fmt.Sprintf(
 				`Load Test Completed Successfully!
@@ -128,8 +134,6 @@ LoadTester Automated Report
 				req.Concurrency,
 			)
 
-			// Send email report
-			toEmail := "abubakarismail508@gmail.com" // Change to your email address
 			if err := mailer.SendEmail(toEmail, subject, body); err != nil {
 				log.Printf("Failed to send email: %v", err)
 			} else {
@@ -141,6 +145,69 @@ LoadTester Automated Report
 			Message: fmt.Sprintf("Load test started for %s with %d requests at concurrency %d", req.URL, req.Count, req.Concurrency),
 		}
 		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(resp)
+	})
+
+	// Health check endpoint
+	http.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
+		err := store.DB.PingContext(ctx)
+		dbConnected := err == nil
+
+		status := "healthy"
+		if !dbConnected {
+			status = "unhealthy"
+		}
+
+		// Compose health email
+		subject := "LoadTester Service Health Check"
+		body := fmt.Sprintf(
+			`Health Check Report:
+
+Service Status: %s
+Database Connected: %t
+Timestamp: %s
+
+%s
+
+Regards,
+LoadTester Monitoring
+`,
+			status,
+			dbConnected,
+			time.Now().Format(time.RFC1123),
+			func() string {
+				if dbConnected {
+					return "All systems operational."
+				}
+				return "Database connection failed! Immediate attention required."
+			}(),
+		)
+
+		// Send health email asynchronously
+		go func() {
+			if err := mailer.SendEmail(toEmail, subject, body); err != nil {
+				log.Printf("Failed to send health check email: %v", err)
+			} else {
+				log.Printf("Health check email sent successfully to %s", toEmail)
+			}
+		}()
+
+		// Respond with JSON health status
+		resp := HealthResponse{
+			Status:      status,
+			DBConnected: dbConnected,
+			Timestamp:   time.Now().Format(time.RFC3339),
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		if dbConnected {
+			w.WriteHeader(http.StatusOK)
+		} else {
+			w.WriteHeader(http.StatusServiceUnavailable)
+		}
 		json.NewEncoder(w).Encode(resp)
 	})
 
